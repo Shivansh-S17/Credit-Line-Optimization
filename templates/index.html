@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ICICI Credit Line Decision Desk</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero-card">
+        <div>
+          <p class="eyebrow">LOCAL DEMO • CREDIT LINE MANAGEMENT</p>
+          <h1>ICICI Credit Line Decision Desk</h1>
+          <p class="subtitle">Search any customer ID to view the recommended action, risk score, and the business rationale behind the decision.</p>
+        </div>
+        <form class="search-box" method="get" action="/">
+          <label for="customer_id">Customer ID</label>
+          <div class="search-row">
+            <input id="customer_id" name="customer_id" type="number" min="1" placeholder="e.g. 124" required>
+            <button type="submit">Lookup</button>
+          </div>
+        </form>
+      </header>
+
+      <section class="stats-grid">
+        <article class="stat-card">
+          <span class="stat-label">Customers scored</span>
+          <strong>{{ portfolio_stats.customers }}</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">High-risk accounts</span>
+          <strong>{{ portfolio_stats.high_risk }}</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Increase candidates</span>
+          <strong>{{ portfolio_stats.increase_candidates }}</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Observed default rate</span>
+          <strong>{{ portfolio_stats.default_rate }}%</strong>
+        </article>
+      </section>
+
+      {% if error %}
+      <section class="message-card error-card">
+        <h2>Lookup issue</h2>
+        <p>{{ error }}</p>
+      </section>
+      {% endif %}
+
+      {% if customer %}
+      <section class="result-grid">
+        <article class="panel primary-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Customer profile</p>
+              <h2>Customer #{{ customer.customer_id }}</h2>
+            </div>
+            <span class="pill" style="background: {{ customer.action_color }};">{{ customer.action }}</span>
+          </div>
+
+          <div class="metric-grid">
+            <div>
+              <span class="metric-label">Risk score</span>
+              <strong>{{ customer.risk_score }}/100</strong>
+              <small>{{ customer.score_band }}</small>
+            </div>
+            <div>
+              <span class="metric-label">Default probability</span>
+              <strong>{{ customer.p_default }}%</strong>
+            </div>
+            <div>
+              <span class="metric-label">Observed outcome</span>
+              <strong>{{ customer.actual_default }}</strong>
+            </div>
+          </div>
+
+          <div class="financial-card">
+            <h3>Key financial context</h3>
+            <ul>
+              <li><span>Credit limit</span><strong>₹{{ "{:,}".format(customer.limit_bal) }}</strong></li>
+              <li><span>Avg. balance (6M)</span><strong>₹{{ "{:,}".format(customer.ead_amount|int) }}</strong></li>
+              <li><span>EAD ratio</span><strong>{{ customer.ead_ratio }}</strong></li>
+              <li><span>Utilisation (6M)</span><strong>{{ customer.util_6m }}%</strong></li>
+              <li><span>Bill pay ratio</span><strong>{{ customer.pay_ratio_6m }}%</strong></li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="panel">
+          <h3>All factors behind this recommendation</h3>
+          <ul class="factor-list">
+            {% for title, status, detail in customer.top_factors %}
+            <li>
+              <strong>{{ title }}</strong>
+              <span>{{ status }} — {{ detail }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        </article>
+      </section>
+
+      <section class="panel explanation-panel">
+        <h3>Business explanation</h3>
+        <p>{{ customer.explanation }}</p>
+        <p class="explanation-source">Source: {{ customer.explanation_source }}</p>
+        {% if customer.ai_error %}
+        <p class="error-details">AI explanation was unavailable: {{ customer.ai_error }}</p>
+        {% endif %}
+      </section>
+      {% else %}
+      <section class="panel placeholder-panel">
+        <h3>How to use this view</h3>
+        <p>Enter a customer ID in the box above to see the recommended action, the risk score, and the business rationale in a bank-style summary.</p>
+      </section>
+      {% endif %}
+    </div>
+  </body>
+</html>

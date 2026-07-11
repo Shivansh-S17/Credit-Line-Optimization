@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICICI Credit Line Decision Desk</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: { 50: '#fdf2f2', 100: '#fbe4e4', 500: '#e53935', 700: '#b71c1c', 900: '#7f1d1d' }, // ICICI-inspired Red
+                        navy: { 800: '#1e293b', 900: '#0f172a' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f8fafc; }
+        .glass-card { background: white; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); border-radius: 16px; }
+        .fade-in { animation: fadeIn 0.4s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Custom scrollbar for factor list */
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 8px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="bg-navy-900 text-white px-6 py-4 shadow-lg flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-brand-500 flex items-center justify-center font-bold text-white shadow-md">IC</div>
+            <span class="font-semibold text-lg tracking-wide">Credit Line Optimizer</span>
+        </div>
+        <div class="flex items-center gap-4 text-sm">
+            <!-- API Key Input for Local Execution -->
+            <input type="password" id="api-key-input" placeholder="Enter Gemini API Key..." class="px-3 py-1.5 rounded bg-slate-800 border border-slate-700 text-white focus:outline-none focus:border-brand-500 w-48 text-xs" title="Only required if running locally outside the Immersive Canvas">
+            <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 transition px-4 py-2 rounded-lg border border-slate-700 flex items-center gap-2">
+                <i class="fa-solid fa-file-csv text-brand-500"></i> Upload CSV
+                <input type="file" id="csv-upload" accept=".csv" class="hidden">
+            </label>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 flex-grow">
+        
+        <!-- Header & Search -->
+        <div class="glass-card p-6 md:p-8 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-gradient-to-r from-white to-slate-50">
+            <div>
+                <p class="text-brand-700 font-bold text-xs tracking-wider uppercase mb-1"><i class="fa-solid fa-bolt mr-1"></i> Decision Desk</p>
+                <h1 class="text-2xl md:text-3xl font-bold text-navy-900 mb-2">Customer Risk Assessment</h1>
+                <p class="text-slate-500 text-sm max-w-xl">Search a customer ID to generate ML-driven limit recommendations and AI-powered business rationales. (Try dummy IDs: 101, 102, 103)</p>
+            </div>
+            
+            <form id="search-form" class="w-full md:w-auto flex items-center gap-2">
+                <div class="relative w-full md:w-64">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                    <input type="number" id="customer-id" required placeholder="Enter Customer ID..." class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+                </div>
+                <button type="submit" class="bg-brand-700 hover:bg-brand-900 text-white px-5 py-2.5 rounded-lg font-medium transition shadow-sm whitespace-nowrap">
+                    Analyze
+                </button>
+            </form>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="stats-grid">
+            <div class="glass-card p-5">
+                <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Total Scored</p>
+                <p class="text-2xl font-bold text-navy-900" id="stat-total">3</p>
+            </div>
+            <div class="glass-card p-5">
+                <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">High Risk (Decrease)</p>
+                <p class="text-2xl font-bold text-red-600" id="stat-decrease">1</p>
+            </div>
+            <div class="glass-card p-5">
+                <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Prime (Increase)</p>
+                <p class="text-2xl font-bold text-emerald-600" id="stat-increase">1</p>
+            </div>
+            <div class="glass-card p-5">
+                <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Avg Default Rate</p>
+                <p class="text-2xl font-bold text-navy-900" id="stat-dr">0.0%</p>
+            </div>
+        </div>
+
+        <!-- Error Message Container -->
+        <div id="error-message" class="hidden mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-3 fade-in">
+            <i class="fa-solid fa-circle-exclamation text-lg"></i>
+            <span id="error-text">Customer not found.</span>
+        </div>
+
+        <!-- Results Area (Hidden initially) -->
+        <div id="results-area" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6 fade-in">
+            
+            <!-- Left Column: Core Metrics & Financial Context -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Recommendation Header -->
+                <div class="glass-card p-6 border-l-4" id="action-card">
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <p class="text-slate-500 text-sm font-medium mb-1">Recommendation for</p>
+                            <h2 class="text-2xl font-bold text-navy-900">Customer #<span id="res-id"></span></h2>
+                        </div>
+                        <div id="res-action-pill" class="px-4 py-1.5 rounded-full text-sm font-bold shadow-sm tracking-wide">
+                            HOLD
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                            <p class="text-slate-500 text-xs font-semibold uppercase mb-1">Risk Score</p>
+                            <p class="text-xl font-bold text-navy-900"><span id="res-score"></span><span class="text-sm text-slate-400 font-normal">/100</span></p>
+                        </div>
+                        <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                            <p class="text-slate-500 text-xs font-semibold uppercase mb-1">Prob. of Default</p>
+                            <p class="text-xl font-bold text-navy-900" id="res-pd"></p>
+                        </div>
+                        <div class="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                            <p class="text-slate-500 text-xs font-semibold uppercase mb-1">Exposure (EAD)</p>
+                            <p class="text-xl font-bold text-navy-900" id="res-ead"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Summary Box -->
+                <div class="glass-card overflow-hidden">
+                    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 px-6 py-4 border-b border-indigo-100 flex items-center gap-2">
+                        <i class="fa-solid fa-sparkles text-indigo-500"></i>
+                        <h3 class="font-bold text-indigo-900">AI-Generated Business Rationale</h3>
+                    </div>
+                    <div class="p-6">
+                        <div id="ai-summary-text" class="text-slate-600 leading-relaxed text-sm">
+                            <!-- AI text injected here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Financial Context -->
+                <div class="glass-card p-6">
+                    <h3 class="font-bold text-navy-900 mb-4 text-sm uppercase tracking-wider text-slate-500">Key Financial Context (Last 6M)</h3>
+                    <div class="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+                        <div class="flex justify-between border-b border-slate-100 pb-2">
+                            <span class="text-slate-500">Current Credit Limit</span>
+                            <strong class="text-navy-900" id="ctx-limit"></strong>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-2">
+                            <span class="text-slate-500">Avg Utilisation</span>
+                            <strong class="text-navy-900" id="ctx-util"></strong>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-2">
+                            <span class="text-slate-500">Bill Pay Ratio</span>
+                            <strong class="text-navy-900" id="ctx-pay-ratio"></strong>
+                        </div>
+                        <div class="flex justify-between border-b border-slate-100 pb-2">
+                            <span class="text-slate-500">EAD Ratio</span>
+                            <strong class="text-navy-900" id="ctx-ead-ratio"></strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Top Factors List -->
+            <div class="glass-card flex flex-col max-h-[600px]">
+                <div class="p-6 border-b border-slate-100">
+                    <h3 class="font-bold text-navy-900 text-sm uppercase tracking-wider text-slate-500">Driving Factors</h3>
+                </div>
+                <div class="p-6 flex-grow overflow-y-auto custom-scroll">
+                    <ul id="factors-list" class="space-y-4">
+                        <!-- Factors injected via JS -->
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // --- 1. Initial State & Dummy Data ---
+        // We use this if the user hasn't uploaded a CSV yet.
+        let dataset = [
+            { CUSTOMER_ID: 101, PREDICTED_ACTION: 1, RISK_SCORE: 22, P_DEFAULT: 0.012, LIMIT_BAL: 200000, EAD_AMOUNT: 45000, UTIL_6M_AVG: 0.25, PAY_RATIO_6M_AVG: 0.85, DPD_MAX_6M: 0, MIN_PAY_STREAK: 0, UTIL_RISING: 0, BALANCE_GROWING: 0, EVER_DPD_90PLUS: 0, DEFAULT: 0 },
+            { CUSTOMER_ID: 102, PREDICTED_ACTION: 2, RISK_SCORE: 85, P_DEFAULT: 0.145, LIMIT_BAL: 150000, EAD_AMOUNT: 140000, UTIL_6M_AVG: 0.92, PAY_RATIO_6M_AVG: 0.15, DPD_MAX_6M: 2, MIN_PAY_STREAK: 4, UTIL_RISING: 1, BALANCE_GROWING: 1, EVER_DPD_90PLUS: 0, DEFAULT: 0 },
+            { CUSTOMER_ID: 103, PREDICTED_ACTION: 0, RISK_SCORE: 35.5, P_DEFAULT: 0.045, LIMIT_BAL: 300000, EAD_AMOUNT: 180000, UTIL_6M_AVG: 0.60, PAY_RATIO_6M_AVG: 0.45, DPD_MAX_6M: 1, MIN_PAY_STREAK: 1, UTIL_RISING: 0, BALANCE_GROWING: 1, EVER_DPD_90PLUS: 0, DEFAULT: 0 }
+        ];
+
+        // Format Currency
+        const formatMoney = (val) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
+
+        // --- 2. CSV Upload Handling ---
+        document.getElementById('csv-upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    dataset = results.data;
+                    updatePortfolioStats();
+                    alert(`Successfully loaded ${dataset.length} customer records.`);
+                }
+            });
+        });
+
+        // --- 3. Update Portfolio Stats ---
+        function updatePortfolioStats() {
+            if (!dataset || dataset.length === 0) return;
+
+            const total = dataset.length;
+            // Use same thresholds as app.py: B1=35, B2=36
+            const B1 = 35;
+            const B2 = 36;
+            // Count high-risk by RISK_SCORE > B2
+            const highRisk = dataset.filter(r => {
+                const s = parseFloat(r.RISK_SCORE);
+                return !Number.isNaN(s) && s > B2;
+            }).length;
+            // Count increase candidates by RISK_SCORE < B1
+            const increaseCandidates = dataset.filter(r => {
+                const s = parseFloat(r.RISK_SCORE);
+                return !Number.isNaN(s) && s < B1;
+            }).length;
+            const defaults = dataset.filter(r => parseInt(r.DEFAULT) === 1).length;
+            const dr = ((defaults / total) * 100).toFixed(1);
+
+            document.getElementById('stat-total').innerText = total;
+            document.getElementById('stat-decrease').innerText = highRisk;
+            document.getElementById('stat-increase').innerText = increaseCandidates;
+            document.getElementById('stat-dr').innerText = `${dr}%`;
+        }
+        updatePortfolioStats(); // Init with dummy data
+
+        // --- 4. Search & UI Update Logic ---
+        document.getElementById('search-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const cid = document.getElementById('customer-id').value;
+            const customer = dataset.find(r => String(r.CUSTOMER_ID) === String(cid));
+
+            if (!customer) {
+                document.getElementById('error-message').classList.remove('hidden');
+                document.getElementById('results-area').classList.add('hidden');
+                document.getElementById('error-text').innerText = `Customer ID ${cid} not found in the current dataset.`;
+                return;
+            }
+
+            document.getElementById('error-message').classList.add('hidden');
+            renderCustomerDetails(customer);
+        });
+
+        // --- STREAMING_CHUNK:Rendering logic and calling Gemini API... ---
+        function renderCustomerDetails(data) {
+            // Unhide results
+            const results = document.getElementById('results-area');
+            results.classList.remove('hidden');
+            // Trigger animation restart
+            results.classList.remove('fade-in');
+            void results.offsetWidth; 
+            results.classList.add('fade-in');
+
+            // Set basic variables
+            const actionMap = { 0: { label: "HOLD", color: "bg-slate-500 text-white", border: "border-slate-500" }, 
+                                1: { label: "INCREASE", color: "bg-emerald-500 text-white", border: "border-emerald-500" }, 
+                                2: { label: "DECREASE", color: "bg-red-600 text-white", border: "border-red-600" } };
+            const B1 = 35;
+            const B2 = 36;
+            const score = parseFloat(data.RISK_SCORE);
+            let actionKey = 0;
+            if (!Number.isNaN(score)) {
+                actionKey = score < B1 ? 1 : score > B2 ? 2 : 0;
+            }
+            const actionInfo = actionMap[actionKey];
+
+            // Update Header & Metrics
+            document.getElementById('res-id').innerText = data.CUSTOMER_ID;
+            document.getElementById('res-score').innerText = score.toFixed(1);
+            document.getElementById('res-pd').innerText = (parseFloat(data.P_DEFAULT) * 100).toFixed(1) + '%';
+            document.getElementById('res-ead').innerText = formatMoney(data.EAD_AMOUNT);
+            
+            // Action Pill & Card Border
+            const pill = document.getElementById('res-action-pill');
+            pill.className = `px-4 py-1.5 rounded-full text-sm font-bold shadow-sm tracking-wide ${actionInfo.color}`;
+            pill.innerText = actionInfo.label;
+            document.getElementById('action-card').className = `glass-card p-6 border-l-4 ${actionInfo.border}`;
+
+            // Financial Context
+            document.getElementById('ctx-limit').innerText = formatMoney(data.LIMIT_BAL);
+            document.getElementById('ctx-util').innerText = (parseFloat(data.UTIL_6M_AVG) * 100).toFixed(0) + '%';
+            document.getElementById('ctx-pay-ratio').innerText = (parseFloat(data.PAY_RATIO_6M_AVG) * 100).toFixed(0) + '%';
+            document.getElementById('ctx-ead-ratio').innerText = (data.EAD_AMOUNT / (data.LIMIT_BAL || 1)).toFixed(2);
+
+            // Generate Factors List
+            renderFactors(data);
+
+            // Fetch AI Summary
+            fetchAISummary(data, actionInfo.label);
+        }
+
+        function renderFactors(data) {
+            const list = document.getElementById('factors-list');
+            list.innerHTML = ''; // clear
+
+            const buildLi = (title, status, detail, isBad) => {
+                const iconColor = isBad ? 'text-red-500' : 'text-emerald-500';
+                const icon = isBad ? 'fa-triangle-exclamation' : 'fa-circle-check';
+                return `
+                <li class="flex gap-3 items-start p-3 rounded-lg hover:bg-slate-50 transition border border-transparent hover:border-slate-100">
+                    <i class="fa-solid ${icon} ${iconColor} mt-1"></i>
+                    <div>
+                        <strong class="text-sm text-navy-900 block">${title}</strong>
+                        <span class="text-xs text-slate-500 font-medium">${status} &mdash; ${detail}</span>
+                    </div>
+                </li>`;
+            };
+
+            const f1 = parseFloat(data.DPD_MAX_6M) >= 2;
+            list.innerHTML += buildLi("Payment Delays", f1 ? "Present" : "Not Present", `Worst 6M delay = ${data.DPD_MAX_6M} months`, f1);
+
+            const f2 = parseFloat(data.UTIL_6M_AVG) > 0.70;
+            list.innerHTML += buildLi("Utilisation", f2 ? "High" : "Moderate/Low", `6M avg = ${(data.UTIL_6M_AVG * 100).toFixed(0)}%`, f2);
+
+            const f3 = parseFloat(data.PAY_RATIO_6M_AVG) < 0.25;
+            list.innerHTML += buildLi("Repayment Discipline", f3 ? "Weak" : "Healthy", `Avg bill pay ratio = ${(data.PAY_RATIO_6M_AVG * 100).toFixed(0)}%`, f3);
+
+            const f4 = parseInt(data.MIN_PAY_STREAK) >= 3;
+            list.innerHTML += buildLi("Min-Payment Pattern", f4 ? "Frequent" : "Limited", `Streak = ${data.MIN_PAY_STREAK} months`, f4);
+
+            const f5 = parseInt(data.UTIL_RISING) === 1;
+            list.innerHTML += buildLi("Utilisation Trend", f5 ? "Rising" : "Stable", f5 ? "Risk indicator flagged" : "Within normal bounds", f5);
+            
+            const f6 = parseInt(data.EVER_DPD_90PLUS) === 1;
+            if(f6) list.innerHTML += buildLi("Severe Delinquency", "Yes", "Ever 90+ DPD history", true);
+        }
+
+        // --- 5. Gemini API Integration ---
+        async function fetchAISummary(data, actionLabel) {
+            const container = document.getElementById('ai-summary-text');
+            container.innerHTML = '<div class="flex items-center gap-2 text-indigo-500 animate-pulse"><i class="fa-solid fa-circle-notch fa-spin"></i> Generating AI executive summary...</div>';
+
+            const systemPrompt = "You are a credit-risk advisor for a bank. Explain the credit limit recommendation for this customer in concise, executive-friendly language. Write 2 short paragraphs, no bullet points, and avoid technical jargon. Focus on explaining WHY the action is being taken based on the provided metrics.";
+            
+            const userPrompt = `
+                Customer action: ${actionLabel}
+                Risk score: ${parseFloat(data.RISK_SCORE).toFixed(1)}/100
+                Default probability: ${(parseFloat(data.P_DEFAULT) * 100).toFixed(1)}%
+                Payment delay in last 6 months: ${data.DPD_MAX_6M}
+                Average utilisation over 6 months: ${(parseFloat(data.UTIL_6M_AVG) * 100).toFixed(0)}%
+                Average payment ratio over 6 months: ${(parseFloat(data.PAY_RATIO_6M_AVG) * 100).toFixed(0)}%
+                Minimum-payment streak: ${data.MIN_PAY_STREAK} months
+                Utilisation rising: ${parseInt(data.UTIL_RISING) === 1 ? 'Yes' : 'No'}
+                Balance growing: ${parseInt(data.BALANCE_GROWING) === 1 ? 'Yes' : 'No'}
+                Ever 90+ days overdue: ${parseInt(data.EVER_DPD_90PLUS) === 1 ? 'Yes' : 'No'}
+            `;
+
+            try {
+                // Uses user-input API key (if provided for local use), otherwise defaults to empty string for Canvas auto-injection.
+                const userInputKey = document.getElementById('api-key-input').value.trim();
+                const apiKey = userInputKey || ""; 
+                
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+                
+                const payload = {
+                    contents: [{ parts: [{ text: userPrompt }] }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] }
+                };
+
+                let response;
+                let retries = 3;
+                let delay = 1000; // Start with 1 second delay
+                
+                // Exponential Backoff Retry Loop
+                for (let i = 0; i < retries; i++) {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (response.status === 503) {
+                        console.warn(`Gemini API overloaded (503). Retrying in ${delay}ms...`);
+                        container.innerHTML = `<div class="flex items-center gap-2 text-orange-500 animate-pulse"><i class="fa-solid fa-server"></i> Server busy. Retrying automatically... (${i+1}/${retries})</div>`;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; // Double the wait time (1s, 2s, 4s)
+                        continue;
+                    }
+                    break; // If it's a 200 OK (or a different error), break the loop and process it
+                }
+
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    // Convert line breaks to HTML paragraphs
+                    container.innerHTML = text.split('\n\n').map(p => `<p class="mb-3 last:mb-0">${p}</p>`).join('');
+                } else if (result.error) {
+                    throw new Error(result.error.message);
+                } else {
+                    throw new Error("Invalid response format from Gemini");
+                }
+            } catch (error) {
+                console.error("AI Error:", error);
+                
+                // Fallback Rule-Based Logic
+                let fallbackText = `The account is being advised for a <strong>${actionLabel}</strong> action. `;
+                if (actionLabel === "DECREASE") fallbackText += "This is primarily driven by signs of financial stress, such as payment delays or high consecutive minimum payments, aiming to reduce the bank's exposure at default.";
+                else if (actionLabel === "INCREASE") fallbackText += "The customer displays excellent repayment discipline, low utilization, and stable balances, making them a prime candidate for a limit extension.";
+                else fallbackText += "Current signals are mixed and do not justify a change in the credit limit at this time.";
+                
+                container.innerHTML = `
+                    <div class="p-3 bg-orange-50 border border-orange-200 rounded text-orange-800 text-xs mb-3">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> AI Generation Failed. Showing rule-based fallback. Ensure API key is valid if running locally. (${error.message})
+                    </div>
+                    <p>${fallbackText}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
