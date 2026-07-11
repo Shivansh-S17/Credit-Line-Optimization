@@ -2,7 +2,7 @@
 
 ## 📌 Project Overview
 
-This repository contains a **Two-Stage Machine Learning Framework** developed during my internship at **ICICI Bank** (Data Science & Analytics Group).
+This repository contains a **Two-Stage Machine Learning Framework** developed during my internship at **ICICI Bank** (Retail Credit Risk Group).
 
 The system systematically reviews credit card portfolios to optimize customer credit limits. Instead of relying on static limits or purely statistical thresholds, this framework dynamically recommends whether to **INCREASE**, **HOLD**, or **DECREASE** a customer's credit limit by directly maximizing the bank's Net Profit & Loss (P&L).
 
